@@ -23,13 +23,15 @@ v0.1 10/18/2019
 
 [CmdletBinding()]
 param (
-    [Parameter(Mandatory=$true,ValueFromPipeline=$true)]
+    [Parameter(Mandatory=$true,ValueFromPipeline=$true,ParameterSetName=’TargetbyWindowHandle’)]
     [String]$MainWindowHandle,
-    [Parameter(Mandatory=$false,ValueFromPipeline=$true,ParameterSetName=’TargetProcess’)]
+    [Parameter(Mandatory=$false,ValueFromPipeline=$true,ParameterSetName=’TargetbyProcessname’)]
     [String]$ProcessName,
+    [Parameter(Mandatory=$true,ValueFromPipeline=$true,ParameterSetName=’TargetbyWindowName’)]
+    [String]$TargetWindowName,
     [Parameter(Mandatory=$false,ValueFromPipeline=$true,ParameterSetName=’AllWindows’)]
     [switch]$AllWindows
-)
+)#need passthrough input ability. 
 
 #Add window rect type to session. 
 Add-Type @"
@@ -79,14 +81,20 @@ function get-windowrect {
 }
 
 #begin
-if (!($ProcessName) -and ($MainWindowHandle)){
-    $ProcessName = (get-process | Where-Object {$_.MainwindowHandle -eq $MainWindowHandle}).ProcessName
-}
-if ($AllWindows)  {
-    #get all processes with window titles
-    $ActiveWindows = Get-Process |where-object {$_.mainWindowTitle} | Select-Object id,name,mainwindowtitle,mainwindowhandle 
+switch ($x) {
+    ($ProcessName) { 
+        $targetwindows = get-process -Name $ProcessName |where-object {$_.mainWindowTitle} | Select-Object id,name,mainwindowtitle,mainwindowhandle
+    }
+    ($AllWindows)  {
+        #get all processes with window titles
+        $targetwindows = Get-Process | where-object {$_.mainWindowTitle} | Select-Object id,name,mainwindowtitle,mainwindowhandle 
+    }
+    ($MainWindowHandle){
+        $targetwindows = get-process | Where-Object {$_.MainwindowHandle -eq $MainWindowHandle} | Select-Object id,name,mainwindowtitle,mainwindowhandle
+    }
 }
 
-$ActiveWindows |ForEach-Object {
+
+$targetwindows |ForEach-Object {
     get-windowrect -Handle $_.mainwindowhandle
 }
