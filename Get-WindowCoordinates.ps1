@@ -21,16 +21,14 @@ http://pinvoke.net/default.aspx/user32/GetWindowRect.html
 v0.1 10/18/2019
 #>
 
-[CmdletBinding()]
+[CmdletBinding(DefaultParameterSetName='Default')]
 param (
-    [Parameter(Mandatory=$true,ValueFromPipeline=$true,ParameterSetName=’TargetbyWindowHandle’)]
+    [Parameter(Mandatory=$true,ValueFromPipelineByPropertyName=$true,ParameterSetName='FindbyWindowHandle')]
     [String]$MainWindowHandle,
-    [Parameter(Mandatory=$false,ValueFromPipeline=$true,ParameterSetName=’TargetbyProcessname’)]
-    [String]$ProcessName,
-    [Parameter(Mandatory=$true,ValueFromPipeline=$true,ParameterSetName=’TargetbyWindowName’)]
-    [String]$TargetWindowName,
-    [Parameter(Mandatory=$false,ValueFromPipeline=$true,ParameterSetName=’AllWindows’)]
-    [switch]$AllWindows
+    [Parameter(Mandatory=$true,ValueFromPipelineByPropertyName=$true,ParameterSetName='FindbyWindowTitle')]
+    [String]$MainWindowTitle,
+    [Parameter(Mandatory=$true,ValueFromPipelineByPropertyName=$true,ParameterSetName='FindbyProcessName')]
+    [String]$ProcessName
 )#need passthrough input ability. 
 
 #Add window rect type to session. 
@@ -57,7 +55,7 @@ Add-Type @"
 
 function get-windowrect {
     param (
-        [string]$Handle
+        [System.IntPtr]$Handle
     )
 
     $WindowRectangle = New-Object RECT 
@@ -70,31 +68,37 @@ function get-windowrect {
         $BottomRight = New-Object System.Management.Automation.Host.Coordinates -ArgumentList $WindowRectangle.Right, $WindowRectangle.Bottom
         $Object = [pscustomobject]@{
             ProcessName = $ProcessName
+            MainWindowHandle = $Handle
             Size = $WindowSize
             TopLeft = $TopLeft
             BottomRight = $BottomRight
         }
         $Object.PSTypeNames.insert(0,'System.Automation.WindowInfo')
-        $Object
+        return $Object
     }    
 
 }
 
 #begin
-switch ($x) {
-    ($ProcessName) { 
+switch ($PSCmdlet.ParameterSetName) {
+    ('FindbyProcessName') { 
         $targetwindows = get-process -Name $ProcessName |where-object {$_.mainWindowTitle} | Select-Object id,name,mainwindowtitle,mainwindowhandle
     }
-    ($AllWindows)  {
-        #get all processes with window titles
-        $targetwindows = Get-Process | where-object {$_.mainWindowTitle} | Select-Object id,name,mainwindowtitle,mainwindowhandle 
-    }
-    ($MainWindowHandle){
+    ('FindbyWindowHandle'){
         $targetwindows = get-process | Where-Object {$_.MainwindowHandle -eq $MainWindowHandle} | Select-Object id,name,mainwindowtitle,mainwindowhandle
     }
+    ('FindbyWindowTitle'){
+        $targetwindows = get-process -verbose | Where-Object {$_.mainWindowTitle -eq $MainWindowTitle} | Select-Object id,name,mainwindowtitle,mainwindowhandle
+        if ($null -eq $targetwindows){
+            Write-Error "No processes found with MainWindowTitle matching '$($MainWindowTitle)'"
+        }
+    }
+    Default {
+        $targetwindows = Get-Process | where-object {$_.mainWindowTitle}
+    }     
 }
 
 
-$targetwindows |ForEach-Object {
+$targetwindows | ForEach-Object {
     get-windowrect -Handle $_.mainwindowhandle
 }
